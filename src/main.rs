@@ -1,7 +1,9 @@
 extern crate rand;
+extern crate whois_rust;
 
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
+use whois_rust::{WhoIs, WhoIsLookupOptions};
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -26,20 +28,50 @@ fn main() -> std::io::Result<()> {
         }
     }
 
-    if let Some((word, gtld)) = find_word_and_suffix(&words_list, &gtlds_list) {
+    match do_it(&words_list, &gtlds_list) {
+        Ok(()) => Ok(()),
+        Err(()) => Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "something went wrong",
+        )),
+    }
+}
+
+fn do_it(words_list: &[String], gtlds_list: &[String]) -> Result<(), ()> {
+    let whois = WhoIs::from_path("node-whois/servers.json").map_err(|_| ())?;
+
+    if let Some((word, gtld)) = find_word_and_suffix(words_list, gtlds_list) {
         assert!(word.len() > gtld.len());
         let (word_trimmed, _) = word.split_at(word.len() - gtld.len());
-        let parts = if word_trimmed.len() > 1 {
+        let (parts, domain_to_check) = if word_trimmed.len() > 1 {
             let mut rng = thread_rng();
             let index = rng.gen_range(1, word_trimmed.len());
             let (subdomain, domain) = word_trimmed.split_at(index);
-            vec![subdomain, domain, gtld]
+            (
+                vec![subdomain, domain, gtld],
+                format!("{}.{}", domain, gtld),
+            )
         } else {
-            vec![word_trimmed, gtld]
+            (
+                vec![word_trimmed, gtld],
+                format!("{}.{}", word_trimmed, gtld),
+            )
         };
-        println!("{}", parts.join("."));
+        if is_domain_unregistered(&whois, &domain_to_check)? {
+            println!("Your neato domain hack is '{}'", parts.join("."));
+        }
     }
     Ok(())
+}
+
+fn is_domain_unregistered(whois: &WhoIs, domain: &str) -> Result<bool, ()> {
+    let lookup = WhoIsLookupOptions::from_domain(domain).map_err(|_| ())?;
+    let result = whois.lookup(lookup).map_err(|_| ())?;
+    println!("{}", result);
+    let lowercase = result.to_lowercase();
+    Ok(lowercase.contains("no entries found")
+        || lowercase.contains("not found")
+        || lowercase.contains("no match for"))
 }
 
 fn find_word_and_suffix<'a>(

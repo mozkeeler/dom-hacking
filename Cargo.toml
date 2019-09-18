@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 rand = "0.7"
+whois-rust = "1.1.9"
