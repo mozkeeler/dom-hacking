@@ -1,0 +1,6 @@
+name: domain hacker
+args:
+    - verbose:
+        short: v
+        long: verbose
+        help: if specified, show output from whois lookup

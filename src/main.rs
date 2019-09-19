@@ -1,6 +1,9 @@
+#[macro_use]
+extern crate clap;
 extern crate rand;
 extern crate whois_rust;
 
+use clap::App;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use whois_rust::{WhoIs, WhoIsLookupOptions};
@@ -9,6 +12,10 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 fn main() -> std::io::Result<()> {
+    let yaml = load_yaml!("cli.yaml");
+    let matches = App::from_yaml(yaml).get_matches();
+    let verbose = matches.is_present("verbose");
+
     let words = File::open("words_alpha.txt")?;
     let words_reader = BufReader::new(words);
     let mut words_list = Vec::with_capacity(400_000);
@@ -28,7 +35,7 @@ fn main() -> std::io::Result<()> {
         }
     }
 
-    match do_it(&words_list, &gtlds_list) {
+    match do_it(&words_list, &gtlds_list, verbose) {
         Ok(()) => Ok(()),
         Err(()) => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
@@ -37,7 +44,7 @@ fn main() -> std::io::Result<()> {
     }
 }
 
-fn do_it(words_list: &[String], gtlds_list: &[String]) -> Result<(), ()> {
+fn do_it(words_list: &[String], gtlds_list: &[String], verbose: bool) -> Result<(), ()> {
     let whois = WhoIs::from_path("node-whois/servers.json").map_err(|_| ())?;
 
     if let Some((word, gtld)) = find_word_and_suffix(words_list, gtlds_list) {
@@ -57,17 +64,19 @@ fn do_it(words_list: &[String], gtlds_list: &[String]) -> Result<(), ()> {
                 format!("{}.{}", word_trimmed, gtld),
             )
         };
-        if is_domain_unregistered(&whois, &domain_to_check)? {
+        if is_domain_unregistered(&whois, &domain_to_check, verbose)? {
             println!("Your neato domain hack is '{}'", parts.join("."));
         }
     }
     Ok(())
 }
 
-fn is_domain_unregistered(whois: &WhoIs, domain: &str) -> Result<bool, ()> {
+fn is_domain_unregistered(whois: &WhoIs, domain: &str, verbose: bool) -> Result<bool, ()> {
     let lookup = WhoIsLookupOptions::from_domain(domain).map_err(|_| ())?;
     let result = whois.lookup(lookup).map_err(|_| ())?;
-    println!("{}", result);
+    if verbose {
+        eprintln!("{}", result);
+    }
     let lowercase = result.to_lowercase();
     Ok(lowercase.contains("no entries found")
         || lowercase.contains("not found")
